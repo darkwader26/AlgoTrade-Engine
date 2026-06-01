@@ -83,14 +83,29 @@ trendScore = emaTrend + almaTrend + stTrend
 trendBull  = trendScore > 0
 trendBear  = trendScore < 0
 
-// Adaptive RSI lookback based on volatility regime
-atrVal     = ta.atr(atrLen)
-baseAtr    = ta.sma(atrVal, 100)
-volRatio   = atrVal / math.max(baseAtr, 0.0001)
-adjRsiLen  = useAdaptive ? math.round(rsiLen * (1 + (volRatio - 1) * 0.5)) : rsiLen
-adjRsiLen := math.max(math.min(adjRsiLen, 55), 3)
+// Adaptive RSI with dynamic lookback (series int length)
+//  Manually implements RSI using for-loop because ta.rsi() needs "simple int" in v6
+atrVal       = ta.atr(atrLen)
+baseAtr      = ta.sma(atrVal, 100)
+volRatio     = atrVal / math.max(baseAtr, 0.0001)
+adjRsiLen    = useAdaptive ? math.round(rsiLen * (1 + (volRatio - 1) * 0.5)) : rsiLen
+adjRsiLen    = math.max(math.min(adjRsiLen, 55), 3)
 
-rsiVal     = ta.rsi(close, int(adjRsiLen))
+// Manual RSI: simple SMA-based so it works with any int lookback (series ok in for-loop)
+calcRsi(src, len) =>
+    u = math.max(src - src[1], 0.0)
+    d = math.max(src[1] - src, 0.0)
+    sumU = 0.0
+    sumD = 0.0
+    for i = 0 to len - 1
+        sumU += u[i]
+        sumD += d[i]
+    avgU = sumU / math.max(len, 1)
+    avgD = sumD / math.max(len, 1)
+    rs = avgU / math.max(avgD, 0.0001)
+    100.0 - 100.0 / (1.0 + rs)
+
+rsiVal = calcRsi(close, adjRsiLen)
 rsiNorm    = (rsiVal - 50) * 2  // Normalized: roughly -100 to +100
 rsiMomentum = ta.sma(rsiVal - 50, 3)
 
