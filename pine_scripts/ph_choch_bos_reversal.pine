@@ -1,0 +1,287 @@
+//@version=6
+indicator(
+  title     = "Parabola & Hyperbola Structure [PH-CHoCH-BoS]",
+  shorttitle= "PH-CHoCH-BoS",
+  overlay   = true,
+  format    = format.price,
+  precision = 2
+)
+
+// ──── CONCEPT ─────────────────────────────────────────────────
+// 1. Parabola  → Quadratic regression (curved trend line)
+// 2. Hyperbola → Cosh bands — widen when trend curves, tighten when straight
+// 3. Structure → Swing high/low detection
+// 4. BoS      → Break of Structure (trend continuation)
+// 5. CHOCH    → Change of Character (potential reversal)
+// 6. Reversal → CHoCH + slope change = confirmed trend reversal
+// ──────────────────────────────────────────────────────────────
+
+// ──── INPUTS ──────────────────────────────────────────────────
+
+// -- Parabola --
+parLen    = input.int(34, "Parabola Period",    minval=10, maxval=100, group="① Parabola")
+parSrc    = input.source(close, "Source",                                     group="① Parabola")
+
+// -- Hyperbola Bands --
+hypMult   = input.float(1.6, "Band Multiplier",  step=0.1, minval=0.3, maxval=5.0, group="② Hyperbola Bands")
+hypAtrLen = input.int(14,    "ATR Period",       minval=5,  maxval=50,             group="② Hyperbola Bands")
+hypCurve  = input.float(0.8, "Curve Sensitivity",step=0.1, minval=0.1, maxval=3.0, group="② Hyperbola Bands",
+            tooltip="How fast bands widen with trend curvature. Higher = more sensitive")
+
+// -- Structure --
+leftBars  = input.int(5, "Swing Left Bars",  minval=2, maxval=30, group="③ Structure")
+rightBars = input.int(5, "Swing Right Bars", minval=2, maxval=30, group="③ Structure")
+
+// -- Signals --
+confBars  = input.int(2, "Confirmation Bars", minval=0, maxval=10, group="④ Signals",
+            tooltip="Bars after a swing break to confirm")
+
+// -- Display --
+showP     = input.bool(true, "Show Parabola",                        group="Display")
+showH     = input.bool(true, "Show Hyperbola Bands",                 group="Display")
+showSW    = input.bool(true, "Show Swing Points",                    group="Display")
+showBoS   = input.bool(true, "Show Break of Structure",              group="Display")
+showCHoCH = input.bool(true, "Show Change of Character",             group="Display")
+showRev   = input.bool(true, "Show Reversal Signals",                group="Display")
+
+// ──── COLOURS ─────────────────────────────────────────────────
+
+colParabola   = #FF9800
+colHypUpper   = color.new(#42A5F5, 70)
+colHypLower   = color.new(#42A5F5, 70)
+colBandFill   = color.new(#2196F3, 85)
+colSwingHigh  = #FFFFFF
+colSwingLow   = #FFFFFF
+colBullBoS    = #4CAF50
+colBearBoS    = #EF5350
+colBullCHoCH  = #00E676
+colBearCHoCH  = #FF5252
+colRevBull    = #00E676
+colRevBear    = #FF5252
+
+// ──── QUADRATIC REGRESSION (PARABOLA) ─────────────────────────
+
+// Fits y = ax² + bx + c to last `len` bars via least squares
+// Returns [value_at_current_bar, slope, curvature]
+quadraticRegression(src, len) =>
+    if bar_index >= len - 1
+        sum_x  = 0.0; sum_x2 = 0.0; sum_x3 = 0.0; sum_x4 = 0.0
+        sum_y  = 0.0; sum_xy = 0.0; sum_x2y = 0.0
+        for i = 0 to len - 1
+            x   = float(i + 1)
+            xx  = x * x
+            y   = nz(src[i])
+            sum_x   += x
+            sum_x2  += xx
+            sum_x3  += xx * x
+            sum_x4  += xx * xx
+            sum_y   += y
+            sum_xy  += x * y
+            sum_x2y += xx * y
+        n = float(len)
+        // Gaussian elimination: 3×3 system
+        // [ n    Σx   Σx² ] [a]   [Σy ]
+        // [ Σx  Σx²  Σx³ ] [b] = [Σxy]
+        // [ Σx² Σx³  Σx⁴ ] [c]   [Σx²y]
+        a11 = n; a12 = sum_x;  a13 = sum_x2; b1 = sum_y
+        a21 = sum_x; a22 = sum_x2; a23 = sum_x3; b2 = sum_xy
+        a31 = sum_x2; a32 = sum_x3; a33 = sum_x4; b3 = sum_x2y
+        // Forward elimination
+        f1 = a21 / a11
+        a22 := a22 - f1 * a12; a23 := a23 - f1 * a13; b2 := b2 - f1 * b1
+        f2 = a31 / a11
+        a32 := a32 - f2 * a12; a33 := a33 - f2 * a13; b3 := b3 - f2 * b1
+        f3 = a32 / a22
+        a33 := a33 - f3 * a23; b3 := b3 - f3 * b2
+        // Back-substitute
+        eps = 1e-12
+        c = math.abs(a33) > eps ? b3 / a33 : 0.0
+        b = math.abs(a22) > eps ? (b2 - a23 * c) / a22 : 0.0
+        a = math.abs(a11) > eps ? (b1 - a12 * b - a13 * c) / a11 : 0.0
+        x_curr = float(len)
+        parabola = a + b * x_curr + c * x_curr * x_curr
+        slope     = 2.0 * c * x_curr + b   // first derivative
+        curvature = 2.0 * c                 // second derivative
+        [parabola, slope, curvature]
+    else
+        [0.0, 0.0, 0.0]
+
+// Parabola from user-chosen source + from close (band centre)
+[parVal,   parSlope,   parCurv]   = quadraticRegression(parSrc, parLen)
+[parClose, _,          _]         = quadraticRegression(close,  parLen)
+
+parCentre = na(parClose) ? close : parClose
+
+// Trend direction from parabola slope (smoothed)
+smoothSlope = ta.sma(parSlope, 5)
+isUpTrend   = smoothSlope > 0
+
+// ──── HYPERBOLA BANDS ────────────────────────────────────────
+
+atrVal = ta.atr(hypAtrLen)
+
+// Normalise curvature relative to ATR
+// When curvature is 0 (straight line), hypFactor → 1 (tight bands)
+// When curvature is high (sharp bend), hypFactor grows (wide bands)
+curvNorm = math.abs(parCurv) * parLen * parLen / (atrVal + 0.0001)
+hypFactor = 1.0 + (math.cosh(curvNorm * hypCurve) - 1.0)
+
+bandWidth  = atrVal * hypMult * hypFactor
+upperBand  = parCentre + bandWidth
+lowerBand  = parCentre - bandWidth
+
+// ──── SWING POINTS ───────────────────────────────────────────
+
+swHigh  = ta.pivothigh(high, leftBars, rightBars)
+swLow   = ta.pivotlow(low,   leftBars, rightBars)
+
+var float lastSH1 = na, var float lastSH2 = na
+var float lastSL1 = na, var float lastSL2 = na
+
+if not na(swHigh)
+    lastSH2 := lastSH1
+    lastSH1 := swHigh
+if not na(swLow)
+    lastSL2 := lastSL1
+    lastSL1 := swLow
+
+swingHighLevel = na(lastSH1) ? high : lastSH1
+swingLowLevel  = na(lastSL1)  ? low  : lastSL1
+prevSH = na(lastSH2) ? swingHighLevel : lastSH2
+prevSL = na(lastSL2) ? swingLowLevel  : lastSL2
+
+// ──── BREAK OF STRUCTURE (BoS) ──────────────────────────────
+
+// Bullish BoS: close above last swing high IN an uptrend
+bullBosRaw = close > swingHighLevel and isUpTrend and not na(lastSH1)
+// Bearish BoS: close below last swing low IN a downtrend
+bearBosRaw = close < swingLowLevel and not isUpTrend and not na(lastSL1)
+
+// Fresh one-shot signals (non-repainting cross)
+bullBosSig = bullBosRaw and not bullBosRaw[1]
+bearBosSig = bearBosRaw and not bearBosRaw[1]
+
+// ──── CHANGE OF CHARACTER (CHoCH) ───────────────────────────
+
+// Bullish CHOCH: close breaks above last swing high AFTER a downtrend
+bullChRaw = close > swingHighLevel and not isUpTrend and not na(lastSH1)
+// Bearish CHOCH: close breaks below last swing low AFTER an uptrend
+bearChRaw = close < swingLowLevel and isUpTrend and not na(lastSL1)
+
+bullChSig = bullChRaw and not bullChRaw[1]
+bearChSig = bearChRaw and not bearChRaw[1]
+
+// ──── REVERSAL SIGNAL ────────────────────────────────────────
+
+// CHoCH + slope crossing zero = confirmed reversal
+slopeCrossUp  = ta.crossover(smoothSlope, 0)
+slopeCrossDn  = ta.crossunder(smoothSlope, 0)
+
+bullRevSig = bullChSig and slopeCrossUp
+bearRevSig = bearChSig and slopeCrossDn
+
+// ──── PLOT PARABOLA ──────────────────────────────────────────
+
+plot(showP ? parVal : na, "Parabola", colParabola, 2,
+     display=showP ? display.all : display.none)
+
+// ──── PLOT HYPERBOLA BANDS ───────────────────────────────────
+
+pHUp = plot(showH ? upperBand : na, "Hyp Upper", colHypUpper, 1,
+            display=showH ? display.all : display.none)
+pHLo = plot(showH ? lowerBand : na, "Hyp Lower", colHypLower, 1,
+            display=showH ? display.all : display.none)
+fill(pHUp, pHLo, color=showH ? colBandFill : na, title="Hyp Fill")
+
+plot(showH ? parCentre : na, "Hyp Centre", color.new(#78909C, 40), 1,
+     style=plot.style_line, display=showH ? display.all : display.none)
+
+// ──── PLOT SWING POINTS ──────────────────────────────────────
+
+plotshape(showSW ? swHigh : na, "Swing High", style=shape.triangledown,
+  location=location.abovebar, color=colSwingHigh, size=size.tiny)
+plotshape(showSW ? swLow  : na, "Swing Low",  style=shape.triangleup,
+  location=location.belowbar, color=colSwingLow,  size=size.tiny)
+
+// ──── PLOT BoS ───────────────────────────────────────────────
+
+plotshape(showBoS and bullBosSig ? low  : na, "Bull BoS",
+  style=shape.labelup, location=location.belowbar,
+  color=colBullBoS, text="BoS", textcolor=color.white, size=size.small)
+plotshape(showBoS and bearBosSig ? high : na, "Bear BoS",
+  style=shape.labeldown, location=location.abovebar,
+  color=colBearBoS, text="BoS", textcolor=color.white, size=size.small)
+
+// ──── PLOT CHoCH ─────────────────────────────────────────────
+
+plotshape(showCHoCH and bullChSig ? low  : na, "Bull CHoCH",
+  style=shape.labelup, location=location.belowbar,
+  color=colBullCHoCH, text="CHoCH", textcolor=color.black, size=size.small)
+plotshape(showCHoCH and bearChSig ? high : na, "Bear CHoCH",
+  style=shape.labeldown, location=location.abovebar,
+  color=colBearCHoCH, text="CHoCH", textcolor=color.black, size=size.small)
+
+// ──── PLOT REVERSAL ──────────────────────────────────────────
+
+plotshape(showRev and bullRevSig ? low  : na, "Bull Rev",
+  style=shape.labelup, location=location.belowbar,
+  color=colRevBull, text="⇑ REV", textcolor=color.black, size=size.normal)
+plotshape(showRev and bearRevSig ? high : na, "Bear Rev",
+  style=shape.labeldown, location=location.abovebar,
+  color=colRevBear, text="⇓ REV", textcolor=color.black, size=size.normal)
+
+// ──── ALERTS ─────────────────────────────────────────────────
+
+alertcondition(bullBosSig, "Bullish BoS",
+  "Price broke structure UP: {{close}} on {{ticker}}")
+alertcondition(bearBosSig, "Bearish BoS",
+  "Price broke structure DOWN: {{close}} on {{ticker}}")
+alertcondition(bullChSig,  "Bullish CHoCH",
+  "Change of Character BULLISH: {{close}} on {{ticker}}")
+alertcondition(bearChSig,  "Bearish CHoCH",
+  "Change of Character BEARISH: {{close}} on {{ticker}}")
+alertcondition(bullRevSig, "Bullish Reversal",
+  "BULLISH REVERSAL confirmed: {{close}} on {{ticker}}")
+alertcondition(bearRevSig, "Bearish Reversal",
+  "BEARISH REVERSAL confirmed: {{close}} on {{ticker}}")
+
+// ──── DASHBOARD ──────────────────────────────────────────────
+
+var table tbl = table.new(position.top_right, 2, 6,
+  frame_width=1, frame_color=color.new(#37474F, 0),
+  bgcolor=color.new(#1A1A2E, 85))
+
+if barstate.islast
+    table.cell(tbl, 0, 0, " PH-CHoCH-BoS ",
+      text_color=#FF9800, bgcolor=#1A1A2E, text_size=size.small,
+      text_halign=text_halign.center)
+
+    // Trend
+    tTxt = isUpTrend ? "▲ BULL" : "▼ BEAR"
+    tCol = isUpTrend ? #4CAF50 : #EF5350
+    table.cell(tbl, 0, 1, "Trend", text_color=#B0BEC5, bgcolor=#1A1A2E, text_size=size.small)
+    table.cell(tbl, 1, 1, tTxt, text_color=tCol, bgcolor=#1A1A2E, text_size=size.small)
+
+    // Slope
+    table.cell(tbl, 0, 2, "Slope", text_color=#B0BEC5, bgcolor=#1A1A2E, text_size=size.small)
+    table.cell(tbl, 1, 2, str.tostring(parSlope, "#,##0.0000"),
+      text_color=#FFFFFF, bgcolor=#1A1A2E, text_size=size.small)
+
+    // Band width
+    table.cell(tbl, 0, 3, "Band ±", text_color=#B0BEC5, bgcolor=#1A1A2E, text_size=size.small)
+    table.cell(tbl, 1, 3, str.tostring(bandWidth, "#,##0.00"),
+      text_color=#42A5F5, bgcolor=#1A1A2E, text_size=size.small)
+
+    // Hyp Factor
+    table.cell(tbl, 0, 4, "Hyp Fac", text_color=#B0BEC5, bgcolor=#1A1A2E, text_size=size.small)
+    table.cell(tbl, 1, 4, str.tostring(hypFactor, "#,##0.00"),
+      text_color=#CE93D8, bgcolor=#1A1A2E, text_size=size.small)
+
+    // Signal
+    sigTxt = bullBosSig   ? "↑BoS"   : bearBosSig   ? "↓BoS"   :
+             bullChSig    ? "↑CHoCH" : bearChSig    ? "↓CHoCH" :
+             bullRevSig   ? "⇑REV"   : bearRevSig   ? "⇓REV"   : "—"
+    sigCol = bullBosSig or bullChSig or bullRevSig ? #00E676 :
+             bearBosSig or bearChSig or bearRevSig ? #FF5252 : #B0BEC5
+    table.cell(tbl, 0, 5, "Signal", text_color=#B0BEC5, bgcolor=#1A1A2E, text_size=size.small)
+    table.cell(tbl, 1, 5, sigTxt, text_color=sigCol, bgcolor=#1A1A2E, text_size=size.small)

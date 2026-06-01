@@ -1,0 +1,14 @@
+# =============================================================================
+#  Root docker-compose.yml — convenience alias
+# =============================================================================
+#  This file exists at the project root for convenience. The source of truth
+#  is docker/docker-compose.yml, which includes the full orchestration for
+#  trading-bot, prometheus, and grafana.
+# =============================================================================
+
+# To use:
+#   docker compose -f docker/docker-compose.yml up
+# or simply:
+#   docker compose up   (when cwd is docker/)
+
+# See docker/docker-compose.yml for the actual configuration.

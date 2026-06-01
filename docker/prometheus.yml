@@ -1,0 +1,24 @@
+# =============================================================================
+#  Prometheus Configuration — AlgoTrade Engine
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Trading bot metrics endpoint
+  - job_name: "trading-bot"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["trading-bot:9090"]
+        labels:
+          service: "algotrade-engine"
+
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          service: "prometheus"

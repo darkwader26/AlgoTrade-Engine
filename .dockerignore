@@ -1,0 +1,48 @@
+# =============================================================================
+#  .dockerignore — Exclude development artifacts from Docker build context
+# =============================================================================
+#  This file ensures the production image stays lean and does not include
+#  caches, local development files, or test code.
+# =============================================================================
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Linter caches
+.ruff_cache/
+.mypy_cache/
+.venv/
+
+# Environment files
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Tests (not needed in production image)
+tests/
+
+# Docker files (don't nest compose files in the image)
+docker/
