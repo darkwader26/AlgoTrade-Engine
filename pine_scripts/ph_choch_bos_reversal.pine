@@ -108,7 +108,7 @@ quadraticRegression(src, len) =>
 
 // Parabola from user-chosen source + from close (band centre)
 [parVal,   parSlope,   parCurv]   = quadraticRegression(parSrc, parLen)
-[parClose, _,          _]         = quadraticRegression(close,  parLen)
+[parClose, _parSlope, _parCurv]  = quadraticRegression(close,  parLen)
 
 parCentre = na(parClose) ? close : parClose
 
@@ -254,7 +254,7 @@ var table tbl = table.new(position.top_right, 2, 6,
 if barstate.islast
     table.cell(tbl, 0, 0, " PH-CHoCH-BoS ",
       text_color=#FF9800, bgcolor=#1A1A2E, text_size=size.small,
-      text_halign=text_halign.center)
+      text_halign=text.align_center)
 
     // Trend
     tTxt = isUpTrend ? "▲ BULL" : "▼ BEAR"
