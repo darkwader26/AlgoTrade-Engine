@@ -124,7 +124,9 @@ atrVal = ta.atr(hypAtrLen)
 // When curvature is 0 (straight line), hypFactor → 1 (tight bands)
 // When curvature is high (sharp bend), hypFactor grows (wide bands)
 curvNorm = math.abs(parCurv) * parLen * parLen / (atrVal + 0.0001)
-hypFactor = 1.0 + (math.cosh(curvNorm * hypCurve) - 1.0)
+// cosh(x) = (exp(x) + exp(-x)) / 2  — Pine v6 has no math.cosh
+_coshX = curvNorm * hypCurve
+hypFactor = (math.exp(_coshX) + math.exp(-_coshX)) / 2.0
 
 bandWidth  = atrVal * hypMult * hypFactor
 upperBand  = parCentre + bandWidth
@@ -135,8 +137,10 @@ lowerBand  = parCentre - bandWidth
 swHigh  = ta.pivothigh(high, leftBars, rightBars)
 swLow   = ta.pivotlow(low,   leftBars, rightBars)
 
-var float lastSH1 = na, var float lastSH2 = na
-var float lastSL1 = na, var float lastSL2 = na
+var float lastSH1 = na
+var float lastSH2 = na
+var float lastSL1 = na
+var float lastSL2 = na
 
 if not na(swHigh)
     lastSH2 := lastSH1
@@ -278,10 +282,7 @@ if barstate.islast
       text_color=#CE93D8, bgcolor=#1A1A2E, text_size=size.small)
 
     // Signal
-    sigTxt = bullBosSig   ? "↑BoS"   : bearBosSig   ? "↓BoS"   :
-             bullChSig    ? "↑CHoCH" : bearChSig    ? "↓CHoCH" :
-             bullRevSig   ? "⇑REV"   : bearRevSig   ? "⇓REV"   : "—"
-    sigCol = bullBosSig or bullChSig or bullRevSig ? #00E676 :
-             bearBosSig or bearChSig or bearRevSig ? #FF5252 : #B0BEC5
+    sigTxt = bullBosSig ? "↑BoS" : bearBosSig ? "↓BoS" : bullChSig ? "↑CHoCH" : bearChSig ? "↓CHoCH" : bullRevSig ? "⇑REV" : bearRevSig ? "⇓REV" : "—"
+    sigCol = bullBosSig or bullChSig or bullRevSig ? #00E676 : bearBosSig or bearChSig or bearRevSig ? #FF5252 : #B0BEC5
     table.cell(tbl, 0, 5, "Signal", text_color=#B0BEC5, bgcolor=#1A1A2E, text_size=size.small)
     table.cell(tbl, 1, 5, sigTxt, text_color=sigCol, bgcolor=#1A1A2E, text_size=size.small)

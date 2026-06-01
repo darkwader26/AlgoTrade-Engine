@@ -88,7 +88,7 @@ atrVal     = ta.atr(atrLen)
 baseAtr    = ta.sma(atrVal, 100)
 volRatio   = atrVal / math.max(baseAtr, 0.0001)
 adjRsiLen  = useAdaptive ? math.round(rsiLen * (1 + (volRatio - 1) * 0.5)) : rsiLen
-adjRsiLen  = math.max(math.min(adjRsiLen, 55), 3)
+adjRsiLen := math.max(math.min(adjRsiLen, 55), 3)
 
 rsiVal     = ta.rsi(close, int(adjRsiLen))
 rsiNorm    = (rsiVal - 50) * 2  // Normalized: roughly -100 to +100
@@ -114,11 +114,9 @@ mtfConfirmed   = useMTF ? (trendBull ? mtfTrendBull : trendBear ? mtfTrendBear :
 
 // ─── Signal Logic ──────────────────────────────────────────────────────
 // Entry: strong trend + momentum alignment + MTF confirmation
-longSignal  = (trendBull and rsiVal > 50 and rsiMomentum > 0 and mtfConfirmed) and 
-               (ta.crossover(fastEma, slowEma) or (ta.crossunder(rsiVal, rsiOS) and trendBull))
+longSignal  = (trendBull and rsiVal > 50 and rsiMomentum > 0 and mtfConfirmed) and (ta.crossover(fastEma, slowEma) or (ta.crossunder(rsiVal, rsiOS) and trendBull))
 
-shortSignal = (trendBear and rsiVal < 50 and rsiMomentum < 0 and mtfConfirmed) and
-               (ta.crossunder(fastEma, slowEma) or (ta.crossover(rsiVal, rsiOB) and trendBear))
+shortSignal = (trendBear and rsiVal < 50 and rsiMomentum < 0 and mtfConfirmed) and (ta.crossunder(fastEma, slowEma) or (ta.crossover(rsiVal, rsiOB) and trendBear))
 
 // Exit: momentum exhaustion confirmed by MTF
 longExit  = ta.crossunder(rsiVal, 50) and mtfConfirmed
@@ -126,9 +124,7 @@ shortExit = ta.crossover(rsiVal, 50) and mtfConfirmed
 
 // ─── Plot: Aesthetic Price Colouring ───────────────────────────────────
 // Color bars based on composite trend + momentum
-barColor = trendBull ? (rsiVal > 60 ? colTrendUp : color.new(colTrendUp, 30)) :
-           trendBear ? (rsiVal < 40 ? colTrendDn : color.new(colTrendDn, 30)) :
-           colNeutral
+barColor = trendBull ? (rsiVal > 60 ? colTrendUp : color.new(colTrendUp, 30)) : trendBear ? (rsiVal < 40 ? colTrendDn : color.new(colTrendDn, 30)) : colNeutral
 barcolor(barColor)
 
 // ─── Plot: Volatility Bands ────────────────────────────────────────────
@@ -136,9 +132,7 @@ pUpper = plot(showBands ? bandUpper : na, "Upper Band", color.new(colBandBase, 4
 pMid   = plot(showBands ? bandCenter : na, "Mid Band", color.new(colBandBase, 20), 1, plot.style_dotted, editable=false)
 pLower = plot(showBands ? bandLower : na, "Lower Band", color.new(colBandBase, 40), 1, plot.style_line, editable=false)
 
-bandFillColor = volHigh ? color.new(color.orange, fillTransparency) :
-                volLow  ? color.new(color.olive,  fillTransparency) :
-                color.new(colBandBase,   fillTransparency)
+bandFillColor = volHigh ? color.new(color.orange, fillTransparency) : volLow ? color.new(color.olive, fillTransparency) : color.new(colBandBase, fillTransparency)
 fill(pUpper, pLower, color=bandFillColor, editable=false, title="Band Fill")
 
 // ─── Plot: Trend ALMA ──────────────────────────────────────────────────
